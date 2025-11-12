@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, "release/**" ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test-lint:
+    name: Build › Test › Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          cache: true
+
+      # Optional: install libsql native deps (only needed for local/Turso with encryption)
+      - name: Install libsql dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+
+      - name: Verify go.mod is tidy
+        run: |
+          cp go.mod go.mod.bak
+          cp go.sum go.sum.bak
+          go mod tidy
+          diff go.mod go.mod.bak || (echo "go.mod not tidy" && exit 1)
+          diff go.sum go.sum.bak || (echo "go.sum not tidy" && exit 1)
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Install golangci-lint
+        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin latest
+
+      - name: Run golangci-lint
+        run: golangci-lint run --timeout=5m ./...

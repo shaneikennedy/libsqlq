@@ -122,12 +122,12 @@ const INSERT_QUERY_TEMPLATE = `INSERT INTO queue (payload) VALUES ('%s')`
 func (q *Queue[T]) Insert(payload T) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("Unable to marshal data of type %T to json: %w", payload, err)
 	}
 
 	_, err = q.db.Exec(fmt.Sprintf(INSERT_QUERY_TEMPLATE, data))
 	if err != nil {
-		return err
+		return fmt.Errorf("Problem inserting event to queue: %w", err)
 	}
 	return nil
 }
@@ -155,7 +155,7 @@ RETURNING id, payload
 func (q *Queue[T]) Next() (*Event[T], error) {
 	tx, err := q.db.Begin()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Problem starting transaction on db %w", err)
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
@@ -167,7 +167,7 @@ func (q *Queue[T]) Next() (*Event[T], error) {
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Problem getting next event in queue: %w", err)
 	}
 	var id int
 	var data string
@@ -175,16 +175,16 @@ func (q *Queue[T]) Next() (*Event[T], error) {
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Problem claiming event from queue: %w", err)
 	}
 	var payload T
 	err = json.Unmarshal([]byte(data), &payload)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Problem unmarshalling data from queue to type %T: %w", payload, err)
 	}
 	err = tx.Commit()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Promblem commiting transaction when attempting to claim item from queue: %w", err)
 	}
 	return &Event[T]{id, &payload}, nil
 }
@@ -196,7 +196,7 @@ const ACK_QUERY_TEMPLATE = `DELETE FROM queue WHERE id = %d`
 func (q *Queue[T]) Ack(id int) error {
 	_, err := q.db.Exec(fmt.Sprintf(ACK_QUERY_TEMPLATE, id))
 	if err != nil {
-		return err
+		return fmt.Errorf("Unable to ack event: %d: %w", id, err)
 	}
 	return nil
 }
@@ -208,7 +208,7 @@ const NACK_QUERY_TEMPLATE = `UPDATE queue SET retries = retries + 1, claimed = 0
 func (q *Queue[T]) Nack(id int) error {
 	_, err := q.db.Query(NACK_QUERY_TEMPLATE, sql.Named("id", id), sql.Named("retry_backoff", q.retryBackoff))
 	if err != nil {
-		return err
+		return fmt.Errorf("Unable to nack event: %d: %w", id, err)
 	}
 	return nil
 }
@@ -220,7 +220,7 @@ func (q *Queue[T]) Size() (int, error) {
 	var size int
 	err := q.db.QueryRow(QUEUE_SIZE_TEMPLATE, sql.Named("max_retries", q.maxRetries)).Scan(&size)
 	if err != nil {
-		return -1, err
+		return -1, fmt.Errorf("Problem getting number of events in the queue: %w", err)
 	}
 	return size, nil
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"os"
 	"time"
 
@@ -206,7 +207,8 @@ const NACK_QUERY_TEMPLATE = `UPDATE queue SET retries = retries + 1, claimed = 0
 // Negative Ack indicates that the event with id: id was not able to be processed, and will be put in quarantice
 // for the configured backoff period before being available to be de-queued again
 func (q *Queue[T]) Nack(id int) error {
-	_, err := q.db.Query(NACK_QUERY_TEMPLATE, sql.Named("id", id), sql.Named("retry_backoff", q.retryBackoff))
+	jitter := time.Duration(rand.Intn(500)) * time.Millisecond
+	_, err := q.db.Query(NACK_QUERY_TEMPLATE, sql.Named("id", id), sql.Named("retry_backoff", q.retryBackoff+jitter))
 	if err != nil {
 		return fmt.Errorf("Unable to nack event: %d: %w", id, err)
 	}

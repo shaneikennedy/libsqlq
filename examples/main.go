@@ -16,7 +16,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	queue.WithRetryBackoff(500 * time.Millisecond).WithMaxRetires(5)
+	queue.WithRetryBackoffSeconds(5).WithMaxRetires(5).WithClaimTimeoutSeconds(1)
 	for i := range 10 {
 		err := queue.Insert(HTTPResponse{Body: fmt.Sprintf("Hello from event %d", i+1)})
 		if err != nil {
